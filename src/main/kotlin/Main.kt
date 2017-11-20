@@ -1,16 +1,22 @@
 import khttp.get
 import khttp.post
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.text.DateFormat
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.*
 
 data class SessionSave(val sessionId: String, val schoolName: String)
 data class SchoolClass(val classTeacher1: String?, val classTeacher2: String?, val displayName: String?, val name: String, val id: Int)
+data class Lesson(val date: LocalDate, val studentCount: Int, val lessonsCode: String, val code: Int, val periodText: String?, val lessonId: Int,
+                  val lessonText: String, val studentGroup: String?, val isSubstitution: Boolean, val isAdditional: Boolean, val isEvent: Boolean, val priority: Int,
+                  val hasInfo: Boolean, val cellState: String, val lessonNumber: Int, val startTime: LocalTime, val roomCapacity: Int,
+                  val id: Int, val endTime: LocalTime)
 
 fun parseSchoolClass(json: JSONObject): SchoolClass? {
     val ct = if(!json.isNull("classteacher")) json.getJSONObject("classteacher").getString("longName") else null
@@ -95,7 +101,7 @@ fun login(username: String, password: String, school: String = "htbla linz leond
 }
 
 fun getLessons(sessionInfo: String, schoolName: String, classId: Int): JSONArray{
-    var headers = mapOf(
+    val headers = mapOf(
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Encoding" to "gzip, deflate, sdch, br",
             "Accept-Language" to "de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4",
@@ -107,11 +113,53 @@ fun getLessons(sessionInfo: String, schoolName: String, classId: Int): JSONArray
     return classes.jsonObject.getJSONObject("data").getJSONObject("result").getJSONObject("data").getJSONObject("elementPeriods").getJSONArray(classId.toString())
 }
 
+fun parseLesson(json: JSONObject): Lesson{
+    try {
+        val date = LocalDate.parse(json.getInt("date").toString(), DateTimeFormatter.ofPattern("yyyyMMdd"))
+        val studentsCount = json.getInt("studentCount")
+        val lessonsCode = json.getString("lessonCode")
+        val code = json.getInt("code")
+        val periodText = json.getString("periodText")
+        val lessonId = json.getInt("lessonId")
+        val lessonText = json.getString("lessonText")
+        val studentGroup = if (json.has("studentGroup")) json.getString("studentGroup") else null
+
+        val isObject = json.getJSONObject("is")
+        val isSubstitution = if(isObject.has("substitution")) isObject.getBoolean("substitution") else false
+        val isEvent = if(isObject.has("event")) isObject.getBoolean("event") else false
+        val isAdditional = if(isObject.has("additional")) isObject.getBoolean("additional") else false
+
+        val priority = json.getInt("priority")
+        val hasInfo = json.getBoolean("hasInfo")
+        val cellState = json.getString("cellState")
+        val lessonNumber = json.getInt("lessonNumber")
+
+        var startTimeString = json.getInt("startTime").toString()
+        if(startTimeString.length == 3) startTimeString = "0"+startTimeString
+
+        val startTime = LocalTime.parse(startTimeString, DateTimeFormatter.ofPattern("HHmm"))
+        val roomCapacity = json.getInt("roomCapacity")
+        val id = json.getInt("id")
+        var endTimeString = json.getInt("endTime").toString()
+
+        if(endTimeString.length == 3) endTimeString = "0"+endTimeString
+        val endTime = LocalTime.parse(endTimeString, DateTimeFormatter.ofPattern("HHmm"))
+
+        return Lesson(date, studentsCount, lessonsCode, code, periodText, lessonId, lessonText, studentGroup, isSubstitution, isAdditional,
+                isEvent, priority, hasInfo, cellState, lessonNumber, startTime, roomCapacity, id, endTime)
+    }catch (ex: JSONException){
+        println(json)
+        throw ex
+    }
+
+}
+
 fun main(args: Array<String>){
     println("Requesting Classes")
 
     print("Password: ")
     val passwd = readLine()!!
+    for(i in 1..20) println(".")
     val (sessionId, schoolname) = login("if150113",passwd) ?: throw IllegalStateException("Could not login")
 
 
@@ -120,10 +168,13 @@ fun main(args: Array<String>){
     val date = LocalDate.parse("20.11.2017",DateTimeFormatter.ofPattern("d.M.yyyy"))
 
     val classes = getClasses(sessionId, schoolname)
-    val IIIbhif = classes[destClass] ?: throw IllegalStateException("Could not find 3BHIF class")
+    val threeBeehive = classes[destClass] ?: throw IllegalStateException("Could not find 3BHIF class")
 
-    val lessons = getLessons(sessionId,schoolname,IIIbhif.id)
-    lessons.filter { lesson -> if(lesson is JSONObject) lesson.getInt("date") == date.year*10000+date.month.value*100+date.dayOfMonth else false }.forEach { lesson-> println(lesson) }
+    val jsonLessons = getLessons(sessionId,schoolname,threeBeehive.id).filter { lesson -> if(lesson is JSONObject) lesson.getInt("date") == date.year*10000+date.month.value*100+date.dayOfMonth else false }
+    val lessons = MutableList<Lesson>(jsonLessons.count(), {ind -> parseLesson(jsonLessons[ind] as JSONObject)})
+    jsonLessons.forEach { lesson-> if(lesson is JSONObject) parseLesson(lesson) }
+
+    lessons.forEach { less -> println(less) }
 
     println("Done")
 }
