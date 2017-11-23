@@ -1,6 +1,8 @@
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalTime
+
+import java.time.temporal.ChronoUnit.MINUTES
 import java.time.format.DateTimeFormatter
 
 
@@ -34,8 +36,13 @@ fun main(args: Array<String>){
     val dateString = readLine()!!
     var date = LocalDate.parse(dateString, DateTimeFormatter.ofPattern("dd.MM.yyyy"))
 
+    var lastLessonEnded: LocalTime? = null
     val lessons = f.getLessons("3BHIF",date).sortedBy { it.startTime }
     lessons.forEach {
+        if(lastLessonEnded != null){
+            println("- ${MINUTES.between(lastLessonEnded, it.startTime)}")
+        }
+        lastLessonEnded = it.endTime
         print("[${it.startTime} - ${it.endTime}] ")
         when{
             it.isAdditional ->      print("!Additional:   ")

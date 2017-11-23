@@ -61,7 +61,7 @@ class Webuntis(val password: String, val username: String, val schoolname: Strin
         }
     }
 
-    private fun getLessonsJson(classId: Int): JSONObject {
+    private fun getLessonsJson(classId: Int, date: LocalDate): JSONObject {
         val headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
                 "Accept-Encoding" to "gzip, deflate, sdch, br",
@@ -70,7 +70,9 @@ class Webuntis(val password: String, val username: String, val schoolname: Strin
                 "Connection" to "keep-alive",
                 "Cookie" to "page=; JSESSIONID=${session.sessionId}; schoolname=\"${session.schoolName}\""
         )
-        val classes = get("https://mese.webuntis.com/WebUntis/api/public/timetable/weekly/data?elementType=1&elementId=273&date=2017-11-21&formatId=2", headers = headers)
+        val dateString = "${date.year}-${date.monthValue}-${date.dayOfMonth}"
+        println("Date: $dateString")
+        val classes = get("https://mese.webuntis.com/WebUntis/api/public/timetable/weekly/data?elementType=1&elementId=273&date=$dateString&formatId=2", headers = headers)
         return classes.jsonObject.getJSONObject("data").getJSONObject("result").getJSONObject("data")
     }
 
@@ -128,7 +130,7 @@ class Webuntis(val password: String, val username: String, val schoolname: Strin
     }
 
     fun getLessons(classId: Int, date: LocalDate): List<Lesson>{
-        val jsonInfo = getLessonsJson(classId)
+        val jsonInfo = getLessonsJson(classId, date)
         val jsonDescriptions = jsonInfo.getJSONArray("elements").groupBy { if(it is JSONObject) it.getInt("type") else -1 }
 
         val subjectDescriptions = jsonDescriptions[3]!!.map { parseSubjectDescription(it as JSONObject) }.associate { it.id to it }
